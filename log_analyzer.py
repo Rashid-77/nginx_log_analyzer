@@ -9,6 +9,7 @@
 
 import json
 from datetime import date
+
 import numpy as np
 
 from log_parser import get_link, get_resp_time
@@ -46,16 +47,12 @@ class LogStat:
             self.log[v]["count"] = len(self.log[v]["data"])
 
     def normalize_to_report_size(self, size: int):
-        dtype = [
-            ('url', '<U18'),    
-            ('resp_time', float)
-        ]
+        dtype = [("url", "<U18"), ("resp_time", float)]
         data = []
         [data.append([v, self.log[v]["time_sum"]]) for v in self.log.keys()]
-        data = np.array([tuple(d) for d in data], dtype=dtype) 
-        data[::-1].sort(order=['resp_time'])
+        data = np.array([tuple(d) for d in data], dtype=dtype)
+        data[::-1].sort(order=["resp_time"])
         return data[:size]
-
 
     def calc_stat(self):
         total_count = 0
@@ -110,20 +107,18 @@ right_log1 = [
     '"GET a h" 10.0',
     '"GET b h" 5.0',
     '"GET b h" 3.0',
-
     '"GET c h" 0.01',
     '"GET c h" 1.0',
-
     '"GET d h" 33.0',
     '"GET d h" 99.0',
-
     '"GET e h" 2.0',
     '"GET e h" 7.0',
     '"GET e h" 6.8',
-
     '"GET f h" 2.0',
     '"GET f h" 12.0',
 ]
+
+
 def main():
     for line in right_log1:
         log_stat.add_url(get_link(line), get_resp_time(line))
