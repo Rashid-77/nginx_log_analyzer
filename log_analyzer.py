@@ -9,6 +9,7 @@
 
 import json
 from datetime import date
+from statistics import fmean, median
 
 import numpy as np
 
@@ -42,61 +43,55 @@ class LogStat:
             self.log[url]["data"].append(time)
 
     def calc_sums(self):
-        for v in self.log.keys():
-            self.log[v]["time_sum"] = sum(self.log[v]["data"])
-            self.log[v]["count"] = len(self.log[v]["data"])
+        self.stat["count"] = 0
+        for k in self.log.keys():
+            self.log[k]["time_sum"] = sum(self.log[k]["data"])
+            self.log[k]["count"] = len(self.log[k]["data"])
+            self.stat["count"] += self.log[k]["count"]
 
-    def normalize_to_report_size(self, size: int):
-        dtype = [("url", "<U18"), ("resp_time", float)]
+        time_sums = [self.log[v]["time_sum"] for v in self.log.keys()]
+        self.stat["time_sum"] = sum(time_sums)
+
+    def get_sorted_urls_for_report(self, size: int) -> tuple:
         data = []
         [data.append([v, self.log[v]["time_sum"]]) for v in self.log.keys()]
+
+        dtype = [("url", "<U256"), ("time_sum", float)]
         data = np.array([tuple(d) for d in data], dtype=dtype)
-        data[::-1].sort(order=["resp_time"])
-        return data[:size]
+        data[::-1].sort(order=["time_sum"])
+        return (arr["url"] for arr in data[:size])
 
-    def calc_stat(self):
-        total_count = 0
-
-        for v in self.log.keys():
-            self.log[v]["count"] = len(self.log[v]["data"])
-            total_count += self.log[v]["count"]
-            self.log[v]["time_sum"] = sum(self.log[v]["data"])
-
-        total_time = sum([self.log[v]["time_sum"] for v in self.log.keys()])
-
-        for v in self.log.keys():
-            time_sum = self.log[v]["time_sum"]
-            self.log[v]["time_avg"] = time_sum / self.log[v]["count"]
-            self.log[v]["time_max"] = max(self.log[v]["data"])
-
-            self.log[v]["time_perc"] = time_sum / total_time * 100
-            count_perc = self.log[v]["count"] / total_count * 100
-            self.log[v]["count_perc"] = count_perc
-        self.stat["count"] = total_count
-        self.stat["time_sum"] = total_time
-
-    def get_stat(self):
+    def calc_stat(self, urls: tuple) -> list[dict]:
         data = []
-        for k in self.log.keys():
-            item = self.log[k]
-            d = sorted(item.pop("data"))
-            item["time_med"] = d[len(d) // 2]
-            item["url"] = k
-            data.append(item)
+        for k in urls:
+            print(k)
+            count_perc = self.log[k]["count"] / self.stat["count"] * 100
+            time_perc = self.log[k]["time_sum"] / self.stat["time_sum"] * 100
+            i = {
+                "url": k,
+                "count": self.log[k]["count"],
+                "count_perc": count_perc,
+                "time_avg": fmean(self.log[k]["data"]),
+                "time_max": max(self.log[k]["data"]),
+                "time_med": median(sorted(self.log[k]["data"])),
+                "time_perc": time_perc,
+                "time_sum": self.log[k]["time_sum"],
+            }
+            data.append(i)
+            self.log.pop(k)
         return data
 
+    def render_html(self, data, template_fname: str):
+        data = json.dumps(data)
+        fname = f"{config['REPORT_DIR']}/report-{date.today()}.html"
+        # fname = f"report-{date.today()}.html"
 
-def render_html(data, template_fname: str):
-    data = json.dumps(data)
-    fname = f"{config['REPORT_DIR']}/report-{date.today()}.html"
-    # fname = f"report-{date.today()}.html"
+        with open(template_fname, mode="r") as f:
+            file = f.read()
 
-    with open(template_fname, mode="r") as f:
-        file = f.read()
-
-    with open(fname, mode="w") as f:
-        file = file.replace("$table_json", data)
-        f.write(file)
+        with open(fname, mode="w") as f:
+            file = file.replace("$table_json", data)
+            f.write(file)
 
 
 log_stat = LogStat()
@@ -120,19 +115,21 @@ right_log1 = [
 
 
 def main():
-    for line in right_log1:
-        log_stat.add_url(get_link(line), get_resp_time(line))
-    log_stat.calc_sums()
-    log_stat.normalize_to_report_size(5)
-    return
-    # file = "log/sample.log"
     file = "log/nginx-access-ui.log-20170630"
+    file = "log/sample.log"
+    cnt = 0
     with open(file) as f:
         for line in f:
             log_stat.add_url(get_link(line), get_resp_time(line))
-
-    log_stat.calc_stat()
-    render_html(log_stat.get_stat(), "report.html")
+            cnt += 1
+            if cnt % 1000 == 0:
+                print(cnt)
+    # for line in right_log1:
+    #     log_stat.add_url(get_link(line), get_resp_time(line))
+    log_stat.calc_sums()
+    urls = log_stat.get_sorted_urls_for_report(500)
+    data = log_stat.calc_stat(urls)
+    log_stat.render_html(data, "report.html")
 
 
 if __name__ == "__main__":
