@@ -11,7 +11,6 @@ import json
 from datetime import date
 from statistics import fmean, median
 
-import numpy as np
 from http_methods import http_methods
 
 config = {"REPORT_SIZE": 1000, "REPORT_DIR": "./reports", "LOG_DIR": "./log"}
@@ -25,11 +24,10 @@ class LogStat:
             "count": 0,
             "time_sum": 0.0,
         }
-        
+
         self.max_urllen = 0
 
     def add_url(self, line: str):
-        
         start = line.find('"') + 1
         end = line.find('"', start)
         url = line[start:end]
@@ -74,7 +72,15 @@ class LogStat:
         self.stat["time_sum"] = sum(time_sums)
 
     def get_sorted_urls_for_report(self, size: int) -> tuple:
-        data = [{"url": k, "time_sum": self.log[k]["time_sum"]} for k in self.log.keys()]
+        # fmt: off
+        data = [
+            {
+                "url": k,
+                "time_sum": self.log[k]["time_sum"]
+            }
+            for k in self.log.keys()
+        ]
+        # fmt: on
         data.sort(key=lambda x: x["time_sum"], reverse=True)
         return (arr["url"] for arr in data[:size])
 
@@ -130,7 +136,6 @@ class LogStat:
 
 
 log_stat = LogStat()
-
 
 
 def main():

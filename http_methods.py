@@ -1,6 +1,6 @@
-'''
+"""
     This file consist all known http methods
-'''
+"""
 
 http_methods = (
     "ACL",
