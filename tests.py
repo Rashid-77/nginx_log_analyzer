@@ -1,7 +1,6 @@
 import unittest
 
 from log_analyzer import LogStat
-from log_parser import get_link, get_resp_time
 
 right_log = [
     '3.3.3.3 - - [234 5ghd] "GET a h" 10.0',
@@ -14,45 +13,61 @@ bad_log = [
     '"GET HTTP/1.1" 10.0',
     '"GET b h" A',
 ]
+right_log1 = [
+    '3.3.3.3 - - [234 5ghd] "GET a h" 10.0',
+    '"GET a h" 10.0',
+    '"GET a h" 10.0',
+    '"GET b h" 5.0',
+    '"GET b h" 3.0',
+    '"GET c h" 0.01',
+    '"GET c h" 1.0',
+    '"GET d h" 33.0',
+    '"GET d h" 99.0',
+    '"GET e h" 2.0',
+    '"GET e h" 7.0',
+    '"GET e h" 6.8',
+    '"GET f h" 2.0',
+    '"GET f h" 12.0',
+]
 
 
-class TestParser(unittest.TestCase):
-    def test_get_link(self):
-        self.assertEqual(get_link(right_log[0]), "a")
-        self.assertEqual(get_link(right_log[-1]), "b")
+# class TestParser(unittest.TestCase):
+#     def test_get_link(self):
+#         self.assertEqual(get_link(right_log[0]), "a")
+#         self.assertEqual(get_link(right_log[-1]), "b")
 
-    def test_get_resp_time(self):
-        self.assertAlmostEqual(get_resp_time(right_log[0]), 10.0)
-        self.assertEqual(get_resp_time(bad_log[-1]), None)
+#     def test_get_resp_time(self):
+#         self.assertAlmostEqual(get_resp_time(right_log[0]), 10.0)
+#         self.assertEqual(get_resp_time(bad_log[-1]), None)
 
 
 class TestLogAnalyzer(unittest.TestCase):
-    log_stat = LogStat()
 
     def test_add_url(self):
-        url = get_link(right_log[0])
-        time = get_resp_time(right_log[0])
-        self.log_stat.add_url(url, time)
-        self.assertEqual(len(self.log_stat.log), 1)
+        log_stat = LogStat()
+        log_stat.add_url(right_log[0])
+        self.assertEqual(len(log_stat.log), 1)
 
-        self.log_st = LogStat()
+        # self.log_st = LogStat()
 
         for line in right_log:
-            self.log_st.add_url(get_link(line), get_resp_time(line))
+            log_stat.add_url(line)
 
-        self.log_st.calc_stat()
-        self.assertEqual(self.log_st.stat["count"], len(right_log))
-        self.assertAlmostEqual(self.log_st.stat["time_sum"], 38.0)
+        log_stat.calc_sums()
+        urls = log_stat.get_sorted_urls_for_report(2)
+        log_stat.calc_stat(urls)
+        self.assertEqual(log_stat.stat["count"], len(right_log))
+        self.assertAlmostEqual(log_stat.stat["time_sum"], 38.0)
 
     def test_get_stat(self):
-        self.log_st = LogStat()
+        self.log_stat = LogStat()
         for line in right_log:
-            self.log_st.add_url(get_link(line), get_resp_time(line))
+            self.log_stat.add_url(line)
 
-        self.log_st.calc_stat()
-        self.assertEqual(self.log_st.stat["count"], len(right_log))
-        self.assertAlmostEqual(self.log_st.stat["time_sum"], 38.0)
-        data = self.log_st.get_stat()
+        self.log_stat.calc_stat()
+        self.assertEqual(self.log_stat.stat["count"], len(right_log))
+        self.assertAlmostEqual(self.log_stat.stat["time_sum"], 38.0)
+        data = self.log_stat.get_stat()
         origin = [
             {
                 "count": 3,

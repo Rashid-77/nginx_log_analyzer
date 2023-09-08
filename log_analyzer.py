@@ -12,8 +12,7 @@ from datetime import date
 from statistics import fmean, median
 
 import numpy as np
-
-from log_parser import get_link, get_resp_time
+from http_methods import http_methods
 
 config = {"REPORT_SIZE": 1000, "REPORT_DIR": "./reports", "LOG_DIR": "./log"}
 
@@ -26,9 +25,31 @@ class LogStat:
             "count": 0,
             "time_sum": 0.0,
         }
+        
+        self.max_urllen = 0
 
-    def add_url(self, url: str, time: float):
+    def add_url(self, line: str):
+        
+        start = line.find('"') + 1
+        end = line.find('"', start)
+        url = line[start:end]
+
+        if not any(method in url for method in http_methods):
+            return
+        try:
+            url = url.split()[1]
+        except IndexError:
+            return
+
+        time = line[end:].split()[-1]
+        time_ = time.replace(".", "")
+        if not time_.isnumeric():
+            return
+        time = float(time)
+
         stat = self.log.get(url)
+        if len(url) > self.max_urllen:
+            self.max_urllen = len(url)
         if stat is None:
             self.log.update(
                 {
@@ -53,18 +74,13 @@ class LogStat:
         self.stat["time_sum"] = sum(time_sums)
 
     def get_sorted_urls_for_report(self, size: int) -> tuple:
-        data = []
-        [data.append([v, self.log[v]["time_sum"]]) for v in self.log.keys()]
-
-        dtype = [("url", "<U256"), ("time_sum", float)]
-        data = np.array([tuple(d) for d in data], dtype=dtype)
-        data[::-1].sort(order=["time_sum"])
+        data = [{"url": k, "time_sum": self.log[k]["time_sum"]} for k in self.log.keys()]
+        data.sort(key=lambda x: x["time_sum"], reverse=True)
         return (arr["url"] for arr in data[:size])
 
     def calc_stat(self, urls: tuple) -> list[dict]:
         data = []
         for k in urls:
-            print(k)
             count_perc = self.log[k]["count"] / self.stat["count"] * 100
             time_perc = self.log[k]["time_sum"] / self.stat["time_sum"] * 100
             i = {
@@ -81,6 +97,25 @@ class LogStat:
             self.log.pop(k)
         return data
 
+    def _calc_stat(self, urls: tuple, data) -> list[dict]:
+        dat = []
+        for k in urls:
+            count_perc = data[k]["count"] / self.stat["count"] * 100
+            time_perc = data[k]["time_sum"] / self.stat["time_sum"] * 100
+            i = {
+                "url": k,
+                "count": data[k]["count"],
+                "count_perc": count_perc,
+                "time_avg": fmean(data[k]["data"]),
+                "time_max": max(data[k]["data"]),
+                "time_med": median(sorted(data[k]["data"])),
+                "time_perc": time_perc,
+                "time_sum": data[k]["time_sum"],
+            }
+            dat.append(i)
+            data.pop(k)
+        return dat
+
     def render_html(self, data, template_fname: str):
         data = json.dumps(data)
         fname = f"{config['REPORT_DIR']}/report-{date.today()}.html"
@@ -96,38 +131,16 @@ class LogStat:
 
 log_stat = LogStat()
 
-right_log1 = [
-    '3.3.3.3 - - [234 5ghd] "GET a h" 10.0',
-    '"GET a h" 10.0',
-    '"GET a h" 10.0',
-    '"GET b h" 5.0',
-    '"GET b h" 3.0',
-    '"GET c h" 0.01',
-    '"GET c h" 1.0',
-    '"GET d h" 33.0',
-    '"GET d h" 99.0',
-    '"GET e h" 2.0',
-    '"GET e h" 7.0',
-    '"GET e h" 6.8',
-    '"GET f h" 2.0',
-    '"GET f h" 12.0',
-]
 
 
 def main():
     file = "log/nginx-access-ui.log-20170630"
-    file = "log/sample.log"
-    cnt = 0
     with open(file) as f:
         for line in f:
-            log_stat.add_url(get_link(line), get_resp_time(line))
-            cnt += 1
-            if cnt % 1000 == 0:
-                print(cnt)
-    # for line in right_log1:
-    #     log_stat.add_url(get_link(line), get_resp_time(line))
+            log_stat.add_url(line)
+
     log_stat.calc_sums()
-    urls = log_stat.get_sorted_urls_for_report(500)
+    urls = log_stat.get_sorted_urls_for_report(1000)
     data = log_stat.calc_stat(urls)
     log_stat.render_html(data, "report.html")
 
