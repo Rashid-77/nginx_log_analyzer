@@ -103,25 +103,6 @@ class LogStat:
             self.log.pop(k)
         return data
 
-    def _calc_stat(self, urls: tuple, data) -> list[dict]:
-        dat = []
-        for k in urls:
-            count_perc = data[k]["count"] / self.stat["count"] * 100
-            time_perc = data[k]["time_sum"] / self.stat["time_sum"] * 100
-            i = {
-                "url": k,
-                "count": data[k]["count"],
-                "count_perc": count_perc,
-                "time_avg": fmean(data[k]["data"]),
-                "time_max": max(data[k]["data"]),
-                "time_med": median(sorted(data[k]["data"])),
-                "time_perc": time_perc,
-                "time_sum": data[k]["time_sum"],
-            }
-            dat.append(i)
-            data.pop(k)
-        return dat
-
     def render_html(self, data, template_fname: str):
         data = json.dumps(data)
         fname = f"{config['REPORT_DIR']}/report-{date.today()}.html"
