@@ -7,6 +7,7 @@
 #                     '"$http_user_agent" "$http_x_forwarded_for" '
 #                     '"$http_X_REQUEST_ID" "$http_X_RB_USER"  $request_time';
 
+import gzip
 import json
 from datetime import date
 from statistics import fmean, median
@@ -28,6 +29,8 @@ class LogStat:
         self.max_urllen = 0
 
     def add_url(self, line: str):
+        if isinstance(line, bytes):
+            line = line.decode("utf-8")
         start = line.find('"') + 1
         end = line.find('"', start)
         url = line[start:end]
@@ -120,11 +123,14 @@ log_stat = LogStat()
 
 
 def main():
-    file = "log/nginx-access-ui.log-20170630"
-    with open(file) as f:
+    path = "log/nginx-access-ui.log-20180101.gz"
+    # path = "log/nginx-access-ui.log-20170630"
+    # path = "log/sample_1000.log-20170501"
+    open_fn = gzip.open if path.endswith(".gz") else open
+
+    with open_fn(path) as f:
         for line in f:
             log_stat.add_url(line)
-
     log_stat.calc_sums()
     urls = log_stat.get_sorted_urls_for_report(1000)
     data = log_stat.calc_stat(urls)
