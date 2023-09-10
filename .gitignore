@@ -144,3 +144,10 @@ debugging/
 /reports
 *.gz
 report-*.html
+
+*.bin
+memray*.html
+output*.png
+profile*.html
+profile*.json
+*.prof
