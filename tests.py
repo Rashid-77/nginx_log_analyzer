@@ -1,6 +1,7 @@
 import unittest
 
-from log_analyzer import LogStat
+from log_analyzer import (LogStat,  # , get_last_log_path, LogInfo
+                          is_log_filename)
 
 right_log = [
     '3.3.3.3 - - [234 5ghd] "GET a h" 10.0',
@@ -64,6 +65,31 @@ class TestLogAnalyzer(unittest.TestCase):
         log_stat.calc_sums()
         log_stat.get_sorted_urls_for_report(3)
         self.assertEqual(log_stat.stat["count"], 0)
+
+    def test_get_last_log_path(self):
+        # fmt: off
+        self.assertEqual(
+            is_log_filename("nginx-access-ui.log-20170630"), "log-20170630"
+        )
+        self.assertEqual(
+            is_log_filename("nginx-access-ui.log-20180101.gz"), "gz"
+            )
+        self.assertEqual(
+            is_log_filename("sample_1000.log-20170501"), "log-20170501"
+            )
+        self.assertEqual(
+            is_log_filename("temp-20220501.log-20230501"), "log-20230501"
+            )
+        self.assertEqual(
+            is_log_filename("nginx-access-ui.log-19790630.bz2"), ""
+            )
+        self.assertEqual(
+            is_log_filename("nginx-access-ui.log-19790630.md"), ""
+            )
+        self.assertEqual(
+            is_log_filename("nginx-access-ui.log-zzz.gz"), ""
+            )
+        # fmt: on
 
 
 if __name__ == "__main__":

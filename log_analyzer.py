@@ -9,7 +9,10 @@
 
 import gzip
 import json
-from datetime import date
+import re
+from collections import namedtuple
+from datetime import date, datetime
+from pathlib import Path
 from statistics import fmean, median
 
 from http_methods import http_methods
@@ -109,7 +112,6 @@ class LogStat:
     def render_html(self, data, template_fname: str):
         data = json.dumps(data)
         fname = f"{config['REPORT_DIR']}/report-{date.today()}.html"
-        # fname = f"report-{date.today()}.html"
 
         with open(template_fname, mode="r") as f:
             file = f.read()
@@ -119,16 +121,46 @@ class LogStat:
             f.write(file)
 
 
-log_stat = LogStat()
+def is_log_filename(filename: str) -> str:
+    """
+    if filename consist "*.log-yyyymmdd" or "*.log-yyyymmdd.gz"
+    it returns file extension empty string
+    """
+    result = re.findall(r"^.*\.(log-\d{8}|log-\d{8}.gz)$", filename)
+    try:
+        if "." in result[0]:
+            return result[0].split(".")[-1]
+        return result[0]
+    except IndexError:
+        return ""
+
+
+def get_last_log_path(log_dir: str) -> str:
+    p = Path(log_dir)
+    last_date = date(1970, 1, 1)
+    last_log = ""
+    ext = ""
+    for x in p.iterdir():
+        if not x.is_file():
+            continue
+        result = is_log_filename(x.name)
+        if result != "":
+            date_str = re.findall(r"^.*\.log-(\d{8})", x.name)
+            date_file = datetime.strptime(date_str[0], "%Y%m%d").date()
+            if date_file > last_date:
+                last_date = date_file
+                last_log = str(x)
+                ext = "gz" if result[0] == "gz" else ""
+    LogInfo = namedtuple("LogInfo", ["path", "date", "ext"])
+    return LogInfo(last_log, last_date, ext)
 
 
 def main():
-    path = "log/nginx-access-ui.log-20180101.gz"
-    # path = "log/nginx-access-ui.log-20170630"
-    # path = "log/sample_1000.log-20170501"
-    open_fn = gzip.open if path.endswith(".gz") else open
+    log_stat = LogStat()
+    log_info = get_last_log_path(config["LOG_DIR"])
+    open_fn = gzip.open if log_info.ext == "gz" else open
 
-    with open_fn(path) as f:
+    with open_fn(log_info.path) as f:
         for line in f:
             log_stat.add_url(line)
     log_stat.calc_sums()
