@@ -158,7 +158,11 @@ def get_last_log_path(log_dir: str) -> str:
     return LogInfo(last_log, last_date, ext)
 
 
-def get_config(config: dict) -> dict:
+def get_config(cfg: dict) -> str:
+    """
+    update the input config dict by values from file if it exist and parsed
+    raise exception when config file hasn`t been parsed
+    """
     arg_parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -175,7 +179,7 @@ def get_config(config: dict) -> dict:
 
     args, _ = arg_parser.parse_known_args()
 
-    cfg = {k.lower(): v for k, v in config.items()}
+    cfg = {k.lower(): v for k, v in cfg.items()}
     if args.config:
         if Path(args.config).exists():
             config = configparser.ConfigParser()
@@ -184,7 +188,7 @@ def get_config(config: dict) -> dict:
             if type(cfg["report_size"]) is str:
                 cfg["report_size"] = int(cfg["report_size"])
         else:
-            arg_parser.error(f"The file {args.config} does not exist!")
+            raise FileNotFoundError(f"The file {args.config} does not exist!")
 
     return {k.upper(): v for k, v in cfg.items()}
 
@@ -192,7 +196,10 @@ def get_config(config: dict) -> dict:
 def main():
     global config
 
-    cfg = get_config(config)
+    try:
+        cfg = get_config(config)
+    except Exception as e:
+        raise e
 
     log_stat = LogStat()
     log_info = get_last_log_path(cfg["LOG_DIR"])
