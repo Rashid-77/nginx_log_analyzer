@@ -12,6 +12,7 @@ import configparser
 import gzip
 import json
 import re
+import sys
 from collections import namedtuple
 from datetime import date, datetime
 from pathlib import Path
@@ -246,26 +247,19 @@ def get_config(cfg: dict) -> str:
 def main():
     global config
     logger.info("\nLog analyzer started")
-    try:
-        cfg = get_config(config)
-    except Exception as e:
-        logger.error(e)
-        raise e
+    cfg = get_config(config)
     logger.info(
         f'config: LOG_DIR={cfg["LOG_DIR"]}, '
         f'REPORT_DIR={cfg["REPORT_DIR"]}, '
         f'REPORT_SIZE={cfg["REPORT_SIZE"]}'
         f'ERR_LIMIT={cfg["ERR_LIMIT"]}'
     )
-
     log_stat = LogStat(cfg)
     log_info = get_last_log_path(cfg["LOG_DIR"])
     open_fn = gzip.open if log_info.ext == "gz" else open
-
     with open_fn(log_info.path) as f:
         for line in f:
             log_stat.add_url(line)
-
     log_stat.calc_sums()
     urls = log_stat.get_sorted_urls_for_report(cfg["REPORT_SIZE"])
     data = log_stat.calc_stat(urls)
@@ -275,4 +269,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+        sys.stdout.write("Render completed\n")
+    except Exception as e:
+        logger.error(e)
+        sys.stdout.write(f"{str(e)}\n")
