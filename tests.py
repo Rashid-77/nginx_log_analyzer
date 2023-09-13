@@ -1,7 +1,6 @@
 import unittest
 
-from log_analyzer import (LogStat,  # , get_last_log_path, LogInfo
-                          is_log_filename)
+from log_analyzer import LogStat, is_log_filename
 
 right_log = [
     '3.3.3.3 - - [234 5ghd] "GET a h" 10.0',
