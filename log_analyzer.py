@@ -7,6 +7,8 @@
 #                     '"$http_user_agent" "$http_x_forwarded_for" '
 #                     '"$http_X_REQUEST_ID" "$http_X_RB_USER"  $request_time';
 
+import argparse
+import configparser
 import gzip
 import json
 import re
@@ -18,6 +20,7 @@ from statistics import fmean, median
 from http_methods import http_methods
 
 config = {"REPORT_SIZE": 1000, "REPORT_DIR": "./reports", "LOG_DIR": "./log"}
+DEFAULT_CONFIG_FILENAME = "config.ini"
 
 
 class LogStat:
@@ -109,9 +112,9 @@ class LogStat:
             self.log.pop(k)
         return data
 
-    def render_html(self, data, template_fname: str):
+    def render_html(self, data, template_fname: str, dest: str):
         data = json.dumps(data)
-        fname = f"{config['REPORT_DIR']}/report-{date.today()}.html"
+        fname = f"{dest}/report-{date.today()}.html"
 
         with open(template_fname, mode="r") as f:
             file = f.read()
@@ -155,18 +158,54 @@ def get_last_log_path(log_dir: str) -> str:
     return LogInfo(last_log, last_date, ext)
 
 
+def get_config(config: dict) -> dict:
+    arg_parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+
+    arg_parser.add_argument(
+        "--config",
+        help="Specify config file",
+        nargs="?",
+        const=DEFAULT_CONFIG_FILENAME,
+        metavar="PATH",
+    )
+
+    args, _ = arg_parser.parse_known_args()
+
+    cfg = {k.lower(): v for k, v in config.items()}
+    if args.config:
+        if Path(args.config).exists():
+            config = configparser.ConfigParser()
+            config.read([args.config])
+            cfg.update(dict(config.items("Global")))
+            if type(cfg["report_size"]) is str:
+                cfg["report_size"] = int(cfg["report_size"])
+        else:
+            arg_parser.error(f"The file {args.config} does not exist!")
+
+    return {k.upper(): v for k, v in cfg.items()}
+
+
 def main():
+    global config
+
+    cfg = get_config(config)
+
     log_stat = LogStat()
-    log_info = get_last_log_path(config["LOG_DIR"])
+    log_info = get_last_log_path(cfg["LOG_DIR"])
     open_fn = gzip.open if log_info.ext == "gz" else open
 
     with open_fn(log_info.path) as f:
         for line in f:
             log_stat.add_url(line)
+
     log_stat.calc_sums()
-    urls = log_stat.get_sorted_urls_for_report(1000)
+    urls = log_stat.get_sorted_urls_for_report(cfg["REPORT_SIZE"])
     data = log_stat.calc_stat(urls)
-    log_stat.render_html(data, "report.html")
+    log_stat.render_html(data, "report.html", cfg["REPORT_DIR"])
 
 
 if __name__ == "__main__":
