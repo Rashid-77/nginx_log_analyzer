@@ -18,22 +18,34 @@ from pathlib import Path
 from statistics import fmean, median
 
 from http_methods import http_methods
+from log import get_logger
 
-config = {"REPORT_SIZE": 1000, "REPORT_DIR": "./reports", "LOG_DIR": "./log"}
+config = {
+    "REPORT_SIZE": 1000,
+    "REPORT_DIR": "./reports",
+    "LOG_DIR": "./log",
+    "ERR_LIMIT": 1,
+    "CFG_FNAME": "config.ini",
+}
 
-# This name will be used, if config file name not specified on the command line
-DEFAULT_CONFIG_FILENAME = "config.ini"
 
 # maximum percent of parse errors, to decide if log successfully parsed
 LOG_PARSE_ERRORS_LIMIT = 1
 
+logger = get_logger(__name__)
+
 
 class LogStat:
-    def __init__(self) -> None:
+    def __init__(self, config: dict) -> None:
         self.log = dict()
         self.report = dict()
-        self.stat = {"count": 0, "time_sum": 0.0, "log_lines": 0}
-        self.parse_err_limit = LOG_PARSE_ERRORS_LIMIT
+        self.par_err_lim = config["ERR_LIMIT"]
+        self.stat = {
+            "count": 0,
+            "time_sum": 0.0,
+            "log_lines": 0,
+            "par_err": 0,
+        }
         self.max_urllen = 0
 
     def add_url(self, line: str):
@@ -45,15 +57,18 @@ class LogStat:
         url = line[start:end]
 
         if not any(method in url for method in http_methods):
+            logger.error(f'method not found in "{url}"')
             return
         try:
             url = url.split()[1]
         except IndexError:
+            logger.error(f'url has not url in "{url}"')
             return
 
         time = line[end:].split()[-1]
         time_ = time.replace(".", "")
         if not time_.isnumeric():
+            logger.error(f'time is not numeric "{time}"')
             return
         time = float(time)
 
@@ -79,13 +94,17 @@ class LogStat:
             self.log[k]["time_sum"] = sum(self.log[k]["data"])
             self.log[k]["count"] = len(self.log[k]["data"])
             self.stat["count"] += self.log[k]["count"]
-        parse_errors = (1 - self.stat["count"] / self.stat["log_lines"]) * 100
-        if parse_errors > self.get_parse_err_limit():
-            raise ValueError(
+
+        parse_errs = 100 * (1 - (self.stat["count"] / self.stat["log_lines"]))
+        self.stat["par_err"] = parse_errs
+        if parse_errs > self.get_parse_err_limit():
+            msg = (
                 f"Parse errors exceed the limit of "
                 f"{self.get_parse_err_limit()}% "
-                f"and are {parse_errors:.1f}%"
+                f"and are {parse_errs:.1f}%"
             )
+            logger.error(msg)
+            raise ValueError(msg)
         time_sums = [self.log[v]["time_sum"] for v in self.log.keys()]
         self.stat["time_sum"] = sum(time_sums)
 
@@ -138,17 +157,25 @@ class LogStat:
             file = f.read()
 
         with open(fname, mode="w") as f:
-            file = file.replace("$table_json", data)
+            file = file.replace("$table_json", data, 1)
             f.write(file)
 
     def get_parse_err_limit(self):
-        return self.parse_err_limit
+        return self.par_err_lim
+
+    def __str__(self):
+        return (
+            f'log of {self.stat["log_lines"]} lines\n'
+            f'parsed {self.stat["count"]} lines\n'
+            f'not parsed {self.stat["par_err"]:.3f} %\n'
+        )
 
 
 def is_log_filename(filename: str) -> str:
     """
     if filename consist "*.log-yyyymmdd" or "*.log-yyyymmdd.gz"
-    it returns file extension empty string
+    it returns file extension
+    otherwise empty string
     """
     result = re.findall(r"^.*\.(log-\d{8}|log-\d{8}.gz)$", filename)
     try:
@@ -194,7 +221,7 @@ def get_config(cfg: dict) -> str:
         "--config",
         help="Specify config file",
         nargs="?",
-        const=DEFAULT_CONFIG_FILENAME,
+        const=cfg["CFG_FNAME"],
         metavar="PATH",
     )
 
@@ -206,9 +233,11 @@ def get_config(cfg: dict) -> str:
             config = configparser.ConfigParser()
             config.read([args.config])
             cfg.update(dict(config.items("Global")))
-            if type(cfg["report_size"]) is str:
-                cfg["report_size"] = int(cfg["report_size"])
+            for k, v in cfg.items():
+                if type(v) is str:
+                    cfg[k] = int(v)
         else:
+            logger.error(f"The file {args.config} does not exist!")
             raise FileNotFoundError(f"The file {args.config} does not exist!")
 
     return {k.upper(): v for k, v in cfg.items()}
@@ -216,13 +245,20 @@ def get_config(cfg: dict) -> str:
 
 def main():
     global config
-
+    logger.info("\nLog analyzer started")
     try:
         cfg = get_config(config)
     except Exception as e:
+        logger.error(e)
         raise e
+    logger.info(
+        f'config: LOG_DIR={cfg["LOG_DIR"]}, '
+        f'REPORT_DIR={cfg["REPORT_DIR"]}, '
+        f'REPORT_SIZE={cfg["REPORT_SIZE"]}'
+        f'ERR_LIMIT={cfg["ERR_LIMIT"]}'
+    )
 
-    log_stat = LogStat()
+    log_stat = LogStat(cfg)
     log_info = get_last_log_path(cfg["LOG_DIR"])
     open_fn = gzip.open if log_info.ext == "gz" else open
 
@@ -234,6 +270,8 @@ def main():
     urls = log_stat.get_sorted_urls_for_report(cfg["REPORT_SIZE"])
     data = log_stat.calc_stat(urls)
     log_stat.render_html(data, "report.html", cfg["REPORT_DIR"])
+    logger.info("render completed:")
+    logger.info(f"\n{log_stat}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import unittest
 
-from log_analyzer import LogStat, is_log_filename
+from log_analyzer import LogStat, config, is_log_filename
 
 right_log = [
     '3.3.3.3 - - [234 5ghd] "GET a h" 10.0',
@@ -19,13 +19,13 @@ bad_log = [
 
 class TestLogAnalyzer(unittest.TestCase):
     def test_add_url(self):
-        log_stat = LogStat()
+        log_stat = LogStat(config)
         log_stat.add_url(right_log[0])
         self.assertEqual(len(log_stat.log), 1)
         self.assertEqual(log_stat.log["a"], {"data": [10.0]})
 
     def test_calc(self):
-        log_stat = LogStat()
+        log_stat = LogStat(config)
         for line in right_log:
             log_stat.add_url(line)
 
@@ -60,7 +60,7 @@ class TestLogAnalyzer(unittest.TestCase):
         self.assertEqual(data, origin)
 
     def test_add_bad_urls_times(self):
-        log_stat = LogStat()
+        log_stat = LogStat(config={"ERR_LIMIT": 100})
         for line in bad_log:
             log_stat.add_url(line)
         log_stat.calc_sums()
@@ -68,8 +68,7 @@ class TestLogAnalyzer(unittest.TestCase):
         self.assertEqual(log_stat.stat["count"], 2)
 
     def test_raise_parse_errors(self):
-        log_stat = LogStat()
-        log_stat.parse_err_limit = 0.1
+        log_stat = LogStat(config)
         for line in bad_log:
             log_stat.add_url(line)
         with self.assertRaises(ValueError) as cm:
