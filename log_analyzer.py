@@ -12,7 +12,6 @@ import configparser
 import gzip
 import json
 import re
-import sys
 from collections import namedtuple
 from datetime import date, datetime
 from pathlib import Path
@@ -141,7 +140,7 @@ class LogStat:
             self.log.pop(k)
         return data
 
-    def render_html(self, data, template_fname: str, dest: str):
+    def render_html(self, data, template_fname: str, dest: Path):
         def round_floats(o):
             if isinstance(o, float):
                 return round(o, 3)
@@ -152,12 +151,10 @@ class LogStat:
             return o
 
         data = json.dumps(round_floats(data))
-        fname = f"{dest}/report-{date.today()}.html"
-
         with open(template_fname, mode="r") as f:
             file = f.read()
 
-        with open(fname, mode="w") as f:
+        with open(dest, mode="w") as f:
             file = file.replace("$table_json", data, 1)
             f.write(file)
 
@@ -178,7 +175,7 @@ def is_log_filename(filename: str) -> str:
     it returns file extension
     otherwise empty string
     """
-    result = re.findall(r"^.*\.(log-\d{8}|log-\d{8}.gz)$", filename)
+    result = re.findall(r"^nginx-access-ui.log-(\d{8}|\d{8}.gz)$", filename)
     try:
         if "." in result[0]:
             return result[0].split(".")[-1]
@@ -187,7 +184,7 @@ def is_log_filename(filename: str) -> str:
         return ""
 
 
-def get_last_log_path(log_dir: str) -> str:
+def get_last_log_path(log_dir: str):
     p = Path(log_dir)
     last_date = date(1970, 1, 1)
     last_log = ""
@@ -197,17 +194,17 @@ def get_last_log_path(log_dir: str) -> str:
             continue
         result = is_log_filename(x.name)
         if result != "":
-            date_str = re.findall(r"^.*\.log-(\d{8})", x.name)
-            date_file = datetime.strptime(date_str[0], "%Y%m%d").date()
+            date_str = re.findall(r"^.*\.log-(\d{8})", x.name)[0]
+            date_file = datetime.strptime(date_str, "%Y%m%d").date()
             if date_file > last_date:
                 last_date = date_file
                 last_log = str(x)
                 ext = "gz" if result[0] == "gz" else ""
     LogInfo = namedtuple("LogInfo", ["path", "date", "ext"])
-    return LogInfo(last_log, last_date, ext)
+    return LogInfo(last_log, date_str, ext)
 
 
-def get_config(cfg: dict) -> str:
+def get_config(cfg_def: dict) -> str:
     """
     update the input config dict by values from file if it exist and parsed
     raise exception when config file hasn`t been parsed
@@ -222,21 +219,24 @@ def get_config(cfg: dict) -> str:
         "--config",
         help="Specify config file",
         nargs="?",
-        const=cfg["CFG_FNAME"],
+        const=cfg_def["CFG_FNAME"],
         metavar="PATH",
     )
 
     args, _ = arg_parser.parse_known_args()
 
-    cfg = {k.lower(): v for k, v in cfg.items()}
+    cfg = {k.lower(): v for k, v in cfg_def.items()}
     if args.config:
         if Path(args.config).exists():
             config = configparser.ConfigParser()
             config.read([args.config])
             cfg.update(dict(config.items("Global")))
-            for k, v in cfg.items():
-                if type(v) is str:
-                    cfg[k] = int(v)
+            for k, v in cfg_def.items():
+                k = k.lower()
+                if isinstance(v, int):
+                    cfg[k] = int(cfg[k])
+                elif isinstance(v, float):
+                    cfg[k] = float(cfg[k])
         else:
             logger.error(f"The file {args.config} does not exist!")
             raise FileNotFoundError(f"The file {args.config} does not exist!")
@@ -251,27 +251,35 @@ def main():
     logger.info(
         f'config: LOG_DIR={cfg["LOG_DIR"]}, '
         f'REPORT_DIR={cfg["REPORT_DIR"]}, '
-        f'REPORT_SIZE={cfg["REPORT_SIZE"]}'
+        f'REPORT_SIZE={cfg["REPORT_SIZE"]}, '
         f'ERR_LIMIT={cfg["ERR_LIMIT"]}'
     )
     log_stat = LogStat(cfg)
     log_info = get_last_log_path(cfg["LOG_DIR"])
+
+    rep_path = Path(cfg["REPORT_DIR"]) / f"report-{log_info.date}.html"
+    if rep_path.exists():
+        print("Latest report already exist")
+        return
+
     open_fn = gzip.open if log_info.ext == "gz" else open
     with open_fn(log_info.path) as f:
         for line in f:
             log_stat.add_url(line)
+
     log_stat.calc_sums()
     urls = log_stat.get_sorted_urls_for_report(cfg["REPORT_SIZE"])
     data = log_stat.calc_stat(urls)
-    log_stat.render_html(data, "report.html", cfg["REPORT_DIR"])
+    log_stat.render_html(data, "report.html", rep_path)
+
     logger.info("render completed:")
     logger.info(f"\n{log_stat}")
+    print(("Render completed\n"))
 
 
 if __name__ == "__main__":
     try:
         main()
-        sys.stdout.write("Render completed\n")
     except Exception as e:
         logger.error(e)
-        sys.stdout.write(f"{str(e)}\n")
+        print(e)
