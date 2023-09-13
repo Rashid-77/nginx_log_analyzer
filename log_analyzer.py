@@ -113,7 +113,16 @@ class LogStat:
         return data
 
     def render_html(self, data, template_fname: str, dest: str):
-        data = json.dumps(data)
+        def round_floats(o):
+            if isinstance(o, float):
+                return round(o, 3)
+            if isinstance(o, dict):
+                return {k: round_floats(v) for k, v in o.items()}
+            if isinstance(o, (list, tuple)):
+                return [round_floats(x) for x in o]
+            return o
+
+        data = json.dumps(round_floats(data))
         fname = f"{dest}/report-{date.today()}.html"
 
         with open(template_fname, mode="r") as f:
