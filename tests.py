@@ -12,6 +12,8 @@ right_log = [
 bad_log = [
     '"GET h" A',
     '"-" 33',
+    '"GET a h" 10.0',
+    '"GET b h" 5.0',
 ]
 
 
@@ -63,7 +65,16 @@ class TestLogAnalyzer(unittest.TestCase):
             log_stat.add_url(line)
         log_stat.calc_sums()
         log_stat.get_sorted_urls_for_report(3)
-        self.assertEqual(log_stat.stat["count"], 0)
+        self.assertEqual(log_stat.stat["count"], 2)
+
+    def test_raise_parse_errors(self):
+        log_stat = LogStat()
+        log_stat.parse_err_limit = 0.1
+        for line in bad_log:
+            log_stat.add_url(line)
+        with self.assertRaises(ValueError) as cm:
+            log_stat.calc_sums()
+        self.assertTrue("errors exceed the limit" in cm.exception.args[0])
 
     def test_get_last_log_path(self):
         # fmt: off

@@ -20,21 +20,24 @@ from statistics import fmean, median
 from http_methods import http_methods
 
 config = {"REPORT_SIZE": 1000, "REPORT_DIR": "./reports", "LOG_DIR": "./log"}
+
+# This name will be used, if config file name not specified on the command line
 DEFAULT_CONFIG_FILENAME = "config.ini"
+
+# maximum percent of parse errors, to decide if log successfully parsed
+LOG_PARSE_ERRORS_LIMIT = 1
 
 
 class LogStat:
     def __init__(self) -> None:
         self.log = dict()
         self.report = dict()
-        self.stat = {
-            "count": 0,
-            "time_sum": 0.0,
-        }
-
+        self.stat = {"count": 0, "time_sum": 0.0, "log_lines": 0}
+        self.parse_err_limit = LOG_PARSE_ERRORS_LIMIT
         self.max_urllen = 0
 
     def add_url(self, line: str):
+        self.stat["log_lines"] += 1
         if isinstance(line, bytes):
             line = line.decode("utf-8")
         start = line.find('"') + 1
@@ -76,7 +79,13 @@ class LogStat:
             self.log[k]["time_sum"] = sum(self.log[k]["data"])
             self.log[k]["count"] = len(self.log[k]["data"])
             self.stat["count"] += self.log[k]["count"]
-
+        parse_errors = (1 - self.stat["count"] / self.stat["log_lines"]) * 100
+        if parse_errors > self.get_parse_err_limit():
+            raise ValueError(
+                f"Parse errors exceed the limit of "
+                f"{self.get_parse_err_limit()}% "
+                f"and are {parse_errors:.1f}%"
+            )
         time_sums = [self.log[v]["time_sum"] for v in self.log.keys()]
         self.stat["time_sum"] = sum(time_sums)
 
@@ -131,6 +140,9 @@ class LogStat:
         with open(fname, mode="w") as f:
             file = file.replace("$table_json", data)
             f.write(file)
+
+    def get_parse_err_limit(self):
+        return self.parse_err_limit
 
 
 def is_log_filename(filename: str) -> str:
