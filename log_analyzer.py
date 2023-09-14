@@ -49,6 +49,8 @@ class LogStat:
         self.max_urllen = 0
 
     def add_url(self, line: str):
+        ''' Parse line then store url and time if parsing successfull
+        '''
         self.stat["log_lines"] += 1
         if isinstance(line, bytes):
             line = line.decode("utf-8")
@@ -89,6 +91,7 @@ class LogStat:
             self.log[url]["data"].append(time)
 
     def calc_sums(self):
+        ''' Calculate total sum, total parsed urls, percent of parse errors, '''
         self.stat["count"] = 0
         for k in self.log.keys():
             self.log[k]["time_sum"] = sum(self.log[k]["data"])
@@ -109,6 +112,7 @@ class LogStat:
         self.stat["time_sum"] = sum(time_sums)
 
     def get_sorted_urls_for_report(self, size: int) -> tuple:
+        ''' Sort and slice data'''
         # fmt: off
         data = [
             {
@@ -122,6 +126,7 @@ class LogStat:
         return (arr["url"] for arr in data[:size])
 
     def calc_stat(self, urls: tuple) -> list[dict]:
+        ''' Calculate sorted and sliced data for report '''
         data = []
         for k in urls:
             count_perc = self.log[k]["count"] / self.stat["count"] * 100
@@ -141,6 +146,7 @@ class LogStat:
         return data
 
     def render_html(self, data, template_fname: str, dest: Path):
+        ''' It renders and saves report on the tamplate base '''
         def round_floats(o):
             if isinstance(o, float):
                 return round(o, 3)
@@ -185,6 +191,11 @@ def is_log_filename(filename: str) -> str:
 
 
 def get_last_log_path(log_dir: str):
+    ''' 
+    return log path, date and extension of latest log 
+    if a log file matching the specified criteria is found
+    otherwise return empty strings for log path, date and extension
+    '''
     last_date = date(1970, 1, 1)
     last_log, last_date_str, ext = "", "", ""
     LogInfo = namedtuple("LogInfo", ["path", "date", "ext"])
