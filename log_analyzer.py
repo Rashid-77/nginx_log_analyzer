@@ -185,11 +185,10 @@ def is_log_filename(filename: str) -> str:
 
 
 def get_last_log_path(log_dir: str):
-    p = Path(log_dir)
     last_date = date(1970, 1, 1)
-    last_log = ""
-    ext = ""
-    for x in p.iterdir():
+    last_log, last_date_str, ext = "", "", ""
+    LogInfo = namedtuple("LogInfo", ["path", "date", "ext"])
+    for x in Path(log_dir).iterdir():
         if not x.is_file():
             continue
         result = is_log_filename(x.name)
@@ -197,11 +196,10 @@ def get_last_log_path(log_dir: str):
             date_str = re.findall(r"^.*\.log-(\d{8})", x.name)[0]
             date_file = datetime.strptime(date_str, "%Y%m%d").date()
             if date_file > last_date:
-                last_date = date_file
+                last_date, last_date_str = date_file, date_str
                 last_log = str(x)
                 ext = "gz" if result[0] == "gz" else ""
-    LogInfo = namedtuple("LogInfo", ["path", "date", "ext"])
-    return LogInfo(last_log, date_str, ext)
+    return LogInfo(last_log, last_date_str, ext)
 
 
 def get_config(cfg_def: dict) -> str:
@@ -254,14 +252,19 @@ def main():
         f'REPORT_SIZE={cfg["REPORT_SIZE"]}, '
         f'ERR_LIMIT={cfg["ERR_LIMIT"]}'
     )
-    log_stat = LogStat(cfg)
+
     log_info = get_last_log_path(cfg["LOG_DIR"])
+    if log_info.path == "":
+        logger.info("Log files not found")
+        print("Log files not found")
+        return
 
     rep_path = Path(cfg["REPORT_DIR"]) / f"report-{log_info.date}.html"
     if rep_path.exists():
         print("Latest report already exist")
         return
 
+    log_stat = LogStat(cfg)
     open_fn = gzip.open if log_info.ext == "gz" else open
     with open_fn(log_info.path) as f:
         for line in f:
