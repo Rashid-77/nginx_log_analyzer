@@ -84,19 +84,19 @@ class TestLogAnalyzer(unittest.TestCase):
             is_log_filename("nginx-access-ui.log-20180101.gz"), "gz"
             )
         self.assertEqual(
-            is_log_filename("sample_1000.log-20170501"), ""
+            is_log_filename("sample_1000.log-20170501"), None
             )
         self.assertEqual(
-            is_log_filename("temp-20220501.log-20230501"), ""
+            is_log_filename("temp-20220501.log-20230501"), None
             )
         self.assertEqual(
-            is_log_filename("nginx-access-ui.log-19790630.bz2"), ""
+            is_log_filename("nginx-access-ui.log-19790630.bz2"), None
             )
         self.assertEqual(
-            is_log_filename("nginx-access-ui.log-19790630.md"), ""
+            is_log_filename("nginx-access-ui.log-19790630.md"), None
             )
         self.assertEqual(
-            is_log_filename("nginx-access-ui.log-zzz.gz"), ""
+            is_log_filename("nginx-access-ui.log-zzz.gz"), None
             )
         # fmt: on
 

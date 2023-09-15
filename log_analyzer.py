@@ -49,8 +49,7 @@ class LogStat:
         self.max_urllen = 0
 
     def add_url(self, line: str):
-        ''' Parse line then store url and time if parsing successfull
-        '''
+        """Parse line then store url and time if parsing successfull"""
         self.stat["log_lines"] += 1
         if isinstance(line, bytes):
             line = line.decode("utf-8")
@@ -91,7 +90,7 @@ class LogStat:
             self.log[url]["data"].append(time)
 
     def calc_sums(self):
-        ''' Calculate total sum, total parsed urls, percent of parse errors, '''
+        """Calculate total sum, total parsed urls, percent of parse errors"""
         self.stat["count"] = 0
         for k in self.log.keys():
             self.log[k]["time_sum"] = sum(self.log[k]["data"])
@@ -112,7 +111,7 @@ class LogStat:
         self.stat["time_sum"] = sum(time_sums)
 
     def get_sorted_urls_for_report(self, size: int) -> tuple:
-        ''' Sort and slice data'''
+        """Sort and slice data"""
         # fmt: off
         data = [
             {
@@ -126,7 +125,7 @@ class LogStat:
         return (arr["url"] for arr in data[:size])
 
     def calc_stat(self, urls: tuple) -> list[dict]:
-        ''' Calculate sorted and sliced data for report '''
+        """Calculate sorted and sliced data for report"""
         data = []
         for k in urls:
             count_perc = self.log[k]["count"] / self.stat["count"] * 100
@@ -145,8 +144,11 @@ class LogStat:
             self.log.pop(k)
         return data
 
-    def render_html(self, data, template_fname: str, dest: Path):
-        ''' It renders and saves report on the tamplate base '''
+    def render_html(self, data, template_fname: str, dest: Path) -> bool:
+        """It renders and saves report on the tamplate base
+        return False if rendering fails
+        """
+
         def round_floats(o):
             if isinstance(o, float):
                 return round(o, 3)
@@ -156,13 +158,19 @@ class LogStat:
                 return [round_floats(x) for x in o]
             return o
 
-        data = json.dumps(round_floats(data))
-        with open(template_fname, mode="r") as f:
-            file = f.read()
-
-        with open(dest, mode="w") as f:
-            file = file.replace("$table_json", data, 1)
-            f.write(file)
+        try:
+            data = json.dumps(round_floats(data))
+            with open(template_fname, mode="r") as f:
+                file = f.read()
+            with open(dest, mode="w") as f:
+                file = file.replace("$table_json", data, 1)
+                f.write(file)
+            return True
+        except FileNotFoundError:
+            logger.error(f"File not found {template_fname}")
+        except OSError as e:
+            logger.error(e)
+        return False
 
     def get_parse_err_limit(self):
         return self.par_err_lim
@@ -187,15 +195,15 @@ def is_log_filename(filename: str) -> str:
             return result[0].split(".")[-1]
         return result[0]
     except IndexError:
-        return ""
+        return None
 
 
 def get_last_log_path(log_dir: str):
-    ''' 
-    return log path, date and extension of latest log 
+    """
+    return log path, date and extension of latest log
     if a log file matching the specified criteria is found
     otherwise return empty strings for log path, date and extension
-    '''
+    """
     last_date = date(1970, 1, 1)
     last_log, last_date_str, ext = "", "", ""
     LogInfo = namedtuple("LogInfo", ["path", "date", "ext"])
@@ -203,7 +211,7 @@ def get_last_log_path(log_dir: str):
         if not x.is_file():
             continue
         result = is_log_filename(x.name)
-        if result != "":
+        if result:
             date_str = re.findall(r"^.*\.log-(\d{8})", x.name)[0]
             date_file = datetime.strptime(date_str, "%Y%m%d").date()
             if date_file > last_date:
@@ -253,6 +261,13 @@ def get_config(cfg_def: dict) -> str:
     return {k.upper(): v for k, v in cfg.items()}
 
 
+def gen_lines(path, ext):
+    open_fn = gzip.open if ext == "gz" else open
+    with open_fn(path) as f:
+        for line in f:
+            yield line
+
+
 def main():
     global config
     logger.info("\nLog analyzer started")
@@ -276,19 +291,19 @@ def main():
         return
 
     log_stat = LogStat(cfg)
-    open_fn = gzip.open if log_info.ext == "gz" else open
-    with open_fn(log_info.path) as f:
-        for line in f:
-            log_stat.add_url(line)
+    lines = gen_lines(log_info.path, log_info.ext)
+
+    for line in lines:
+        log_stat.add_url(line)
 
     log_stat.calc_sums()
     urls = log_stat.get_sorted_urls_for_report(cfg["REPORT_SIZE"])
     data = log_stat.calc_stat(urls)
-    log_stat.render_html(data, "report.html", rep_path)
 
-    logger.info("render completed:")
-    logger.info(f"\n{log_stat}")
-    print(("Render completed\n"))
+    if log_stat.render_html(data, "report.html", rep_path):
+        logger.info("render completed:")
+        logger.info(f"\n{log_stat}")
+        print(("Render completed\n"))
 
 
 if __name__ == "__main__":
