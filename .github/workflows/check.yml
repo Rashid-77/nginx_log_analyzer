@@ -14,3 +14,15 @@ jobs:
     - uses: pre-commit/action@v3.0.0
       with:
         extra_args: flake8 --all-files
+
+  unit-testing:
+    runs-on: ubuntu-22.04
+    steps:
+    - name : Checkout code
+      uses: actions/checkout@v3
+    - name : Setup-python
+      uses: actions/setup-python@v3
+      with:
+        python-version: '3.10'
+    - name : Run tests 
+      run : python tests.py
